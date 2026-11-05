@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "prisma generate && next build",
-    "start": "prisma migrate deploy && node prisma/seed.mjs && next start"
+    "start": "node scripts/start.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
