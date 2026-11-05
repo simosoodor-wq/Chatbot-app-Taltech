@@ -71,7 +71,7 @@ export function PromptsDialog(props: {
         props.onOpenChange(open);
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Halda prompte</DialogTitle>
           <DialogDescription>

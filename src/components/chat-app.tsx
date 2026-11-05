@@ -105,11 +105,10 @@ export function ChatApp() {
     });
   }
 
-  async function send(text: string, file: File | null): Promise<boolean> {
+  async function send(text: string, file: File | null, onAccepted: () => void) {
     setError("");
     setBusy(true);
     setStreaming("");
-    let accepted = false;
     try {
       const chat = active ?? (await createChat());
       const form = new FormData();
@@ -119,7 +118,7 @@ export function ChatApp() {
         method: "POST",
         body: form,
       });
-      accepted = true;
+      onAccepted();
 
       const append = (message: ChatMessage) =>
         setActive((current) =>
@@ -146,7 +145,6 @@ export function ChatApp() {
     }
     setStreaming("");
     setBusy(false);
-    return accepted;
   }
 
   function askDelete(chat: ChatSummary) {

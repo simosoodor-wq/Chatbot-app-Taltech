@@ -9,7 +9,7 @@ import { ACCEPTED_FILES, MAX_FILE_BYTES, MAX_MESSAGE_LENGTH } from "@/lib/limits
 export function Composer(props: {
   busy: boolean;
   canClear: boolean;
-  onSend: (text: string, file: File | null) => Promise<boolean>;
+  onSend: (text: string, file: File | null, onAccepted: () => void) => Promise<void>;
   onClear: () => void;
   onError: (message: string) => void;
 }) {
@@ -51,10 +51,10 @@ export function Composer(props: {
       props.onError("Sõnum on liiga pikk. Lubatud on kuni 20 000 tähemärki.");
       return;
     }
-    if (await props.onSend(trimmed, file)) {
+    await props.onSend(trimmed, file, () => {
       setText("");
       clearFile();
-    }
+    });
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
