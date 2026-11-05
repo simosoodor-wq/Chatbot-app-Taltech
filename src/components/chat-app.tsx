@@ -201,7 +201,7 @@ export function ChatApp() {
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-white">
+    <div className="flex h-full overflow-hidden bg-white">
       <aside className="hidden w-[260px] shrink-0 border-r md:block">{sidebar}</aside>
 
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
