@@ -34,7 +34,7 @@ export default function AccessPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-slate-50 p-4">
+    <main className="flex min-h-full items-center justify-center bg-slate-50 p-4">
       <form
         onSubmit={submit}
         className="w-full max-w-sm space-y-4 rounded-lg border bg-white p-6 shadow-sm"
