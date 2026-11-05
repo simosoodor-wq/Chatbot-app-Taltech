@@ -44,24 +44,33 @@ async function limitDiskUse() {
   }
 }
 
-async function syncRows(chunks) {
+/** Returns chunks still to store, and drops rows whose text no longer exists. */
+async function pendingChunks(chunks) {
   const wanted = new Set(chunks.map((chunk) => chunk.id));
-  const existing = await prisma.documentChunk.findMany({ select: { id: true } });
-  const known = new Set(existing.map((row) => row.id));
+  const existing = await prisma.$queryRaw`
+    SELECT "id", "embedding" IS NOT NULL AS "embedded" FROM "DocumentChunk"`;
 
-  const stale = [...known].filter((id) => !wanted.has(id));
+  const stale = existing.map((row) => row.id).filter((id) => !wanted.has(id));
   for (let i = 0; i < stale.length; i += INSERT_BATCH) {
     await prisma.documentChunk.deleteMany({ where: { id: { in: stale.slice(i, i + INSERT_BATCH) } } });
   }
 
-  const missing = chunks.filter((chunk) => !known.has(chunk.id));
-  for (let i = 0; i < missing.length; i += INSERT_BATCH) {
+  const finished = new Set(
+    existing.filter((row) => row.embedded || !VOYAGE_KEY).map((row) => row.id),
+  );
+  const pending = chunks.filter((chunk) => !finished.has(chunk.id));
+  console.log(`[index] ${pending.length} chunks pending, ${stale.length} removed`);
+  return pending;
+}
+
+async function storeTextOnly(pending) {
+  console.log("[index] VOYAGE_API_KEY is not set; only text search is available.");
+  for (let i = 0; i < pending.length; i += INSERT_BATCH) {
     await prisma.documentChunk.createMany({
-      data: missing.slice(i, i + INSERT_BATCH),
+      data: pending.slice(i, i + INSERT_BATCH),
       skipDuplicates: true,
     });
   }
-  console.log(`[index] rows: ${missing.length} added, ${stale.length} removed`);
 }
 
 class RateLimited extends Error {}
@@ -90,23 +99,19 @@ async function embed(texts) {
   }
 }
 
-async function embedMissing() {
-  if (!VOYAGE_KEY) {
-    console.log("[index] VOYAGE_API_KEY is not set; only text search is available.");
-    return;
-  }
+/** Each row is written once, with its vector, to avoid dead rows on the small volume. */
+async function storeEmbedded(pending) {
   let done = 0;
   let batchSize = EMBED_BATCH;
   let paceMs = 0;
-  for (;;) {
-    const rows = await prisma.$queryRaw`
-      SELECT "id", "title", "content" FROM "DocumentChunk"
-      WHERE "embedding" IS NULL ORDER BY "id" LIMIT ${batchSize}`;
-    if (rows.length === 0) break;
+  while (done < pending.length) {
+    const rows = pending.slice(done, done + batchSize);
 
     let vectors;
     try {
-      vectors = await embed(rows.map((row) => `${row.title}\n\n${row.content}`));
+      vectors = await embed(rows.map((row) => `${row.title}
+
+${row.content}`));
     } catch (error) {
       if (!(error instanceof RateLimited)) throw error;
       batchSize = Math.max(MIN_EMBED_BATCH, Math.floor(batchSize / 2));
@@ -116,26 +121,29 @@ async function embedMissing() {
       continue;
     }
     await prisma.$transaction(
-      rows.map((row, index) =>
-        prisma.$executeRaw`
-          UPDATE "DocumentChunk" SET "embedding" = ${JSON.stringify(vectors[index])}::vector
-          WHERE "id" = ${row.id}`,
+      rows.map(
+        (row, index) => prisma.$executeRaw`
+          INSERT INTO "DocumentChunk"
+            ("id", "docId", "manufacturer", "title", "url", "page", "language", "content", "embedding")
+          VALUES (${row.id}, ${row.docId}, ${row.manufacturer}, ${row.title}, ${row.url},
+            ${row.page}, ${row.language}, ${row.content}, ${JSON.stringify(vectors[index])}::vector)
+          ON CONFLICT ("id") DO UPDATE SET "embedding" = EXCLUDED."embedding"`,
       ),
     );
     const before = done;
     done += rows.length;
     if (Math.floor(done / LOG_EVERY) > Math.floor(before / LOG_EVERY)) {
-      console.log(`[index] embedded ${done} chunks`);
+      console.log(`[index] stored ${done} of ${pending.length} chunks`);
     }
     await sleep(paceMs);
   }
-  console.log(`[index] embedding finished, ${done} chunks this run`);
+  console.log(`[index] finished, ${done} chunks stored`);
 }
 
 try {
   await limitDiskUse();
-  await syncRows(readChunks());
-  await embedMissing();
+  const pending = await pendingChunks(readChunks());
+  await (VOYAGE_KEY ? storeEmbedded(pending) : storeTextOnly(pending));
   await limitDiskUse();
 } catch (error) {
   console.error("[index] stopped:", error);
