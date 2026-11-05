@@ -58,7 +58,9 @@ function vectorSearch(embedding: number[]): Promise<Passage[]> {
 function searchTerms(query: string): string {
   const words = query.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? [];
   const useful = words.filter((word) => word.length > 1 && !STOP_WORDS.has(word));
-  return [...new Set(useful)].join(" ");
+  // Documents write the same code as both EPS120 and EPS 120.
+  const codeParts = useful.flatMap((word) => word.split(/(?<=\p{L})(?=\p{N})|(?<=\p{N})(?=\p{L})/u));
+  return [...new Set([...useful, ...codeParts])].join(" ");
 }
 
 function textSearch(query: string): Promise<Passage[]> {
