@@ -4,7 +4,32 @@ import { useEffect, useRef } from "react";
 import { Paperclip } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { formatTime, type ChatMessage } from "@/lib/client";
+import { formatTime, type ChatMessage, type MessageSource } from "@/lib/client";
+
+function Sources({ sources }: { sources: MessageSource[] }) {
+  return (
+    <div className="mt-2 border-t border-slate-200 pt-2">
+      <p className="text-xs font-medium text-slate-600">Allikad</p>
+      <ol className="mt-1 space-y-0.5 text-xs text-slate-600">
+        {sources.map((source) => {
+          const label = `${source.manufacturer}: ${source.title}${source.page ? `, lk ${source.page}` : ""}`;
+          return (
+            <li key={source.number}>
+              [{source.number}]{" "}
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer" className="underline">
+                  {label}
+                </a>
+              ) : (
+                label
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 function Markdown({ text }: { text: string }) {
   return (
@@ -37,6 +62,9 @@ function Bubble({ message }: { message: ChatMessage }) {
         }
       >
         {isUser ? message.content : <Markdown text={message.content} />}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <Sources sources={message.sources} />
+        )}
         {message.attachmentName && (
           <p className="mt-1.5 flex items-center gap-1 text-xs opacity-80">
             <Paperclip className="size-3" aria-hidden /> {message.attachmentName}

@@ -11,11 +11,30 @@ import {
 } from "@/lib/limits";
 import { DEFAULT_MODEL, isModelId } from "@/lib/models";
 import { prisma } from "@/lib/prisma";
-import { buildSystemPrompt } from "@/lib/prompts";
+import { buildSystemPrompt, withPassages } from "@/lib/prompts";
+import { citedSources, retrievePassages, type Passage } from "@/lib/retrieval";
 
 type Context = { params: Promise<{ id: string }> };
 
 const TEXT_EXTENSIONS = /\.(txt|md|csv|json)$/i;
+const SHORT_FOLLOW_UP = 60;
+
+/** Short follow-ups such as "aga talvel?" only make sense with the question before them. */
+function searchQuery(turns: { role: string; content: string }[]): string {
+  const questions = turns.filter((turn) => turn.role === "user");
+  const current = questions[questions.length - 1].content;
+  const previous = questions[questions.length - 2]?.content;
+  return previous && current.length < SHORT_FOLLOW_UP ? `${previous}\n${current}` : current;
+}
+
+async function findPassages(query: string, topP: number): Promise<Passage[]> {
+  try {
+    return await retrievePassages(query, topP);
+  } catch (error) {
+    console.error("Document search failed:", error);
+    return [];
+  }
+}
 
 async function readAttachment(
   entry: FormDataEntryValue | null,
@@ -99,18 +118,28 @@ export function POST(request: Request, { params }: Context) {
 
         send({ type: "user", message: userMessage });
         try {
+          const passages = await findPassages(searchQuery(turns), chat.topP);
+          const question = turns[turns.length - 1];
           let answer = "";
           for await (const delta of streamAnswer({
             model: isModelId(chat.model) ? chat.model : DEFAULT_MODEL,
             system: buildSystemPrompt(chat.systemPrompt?.content, chat.temperature),
-            turns,
+            turns: [
+              ...turns.slice(0, -1),
+              { ...question, content: withPassages(question.content, passages) },
+            ],
             attachment: attachment ?? undefined,
           })) {
             answer += delta;
             send({ type: "delta", text: delta });
           }
           const saved = await prisma.message.create({
-            data: { sessionId: id, role: "assistant", content: answer },
+            data: {
+              sessionId: id,
+              role: "assistant",
+              content: answer,
+              sources: citedSources(passages, answer),
+            },
           });
           send({ type: "done", message: saved });
         } catch (error) {

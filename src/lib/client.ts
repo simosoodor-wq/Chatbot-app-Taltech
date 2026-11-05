@@ -1,10 +1,19 @@
 export type ChatSummary = { id: string; title: string; updatedAt: string };
 
+export type MessageSource = {
+  number: number;
+  title: string;
+  manufacturer: string;
+  url: string | null;
+  page: number | null;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   attachmentName: string | null;
+  sources: MessageSource[] | null;
   createdAt: string;
 };
 

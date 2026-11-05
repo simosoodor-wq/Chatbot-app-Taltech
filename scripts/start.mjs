@@ -21,6 +21,11 @@ function prepareDatabase() {
 
 prepareDatabase();
 
+// Indexing takes minutes on a first run, so the web server must not wait for it.
+if (process.env.DATABASE_URL) {
+  spawn(process.execPath, ["scripts/index-knowledge.mjs"], { stdio: "inherit" });
+}
+
 const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start"], {
   stdio: "inherit",
 });

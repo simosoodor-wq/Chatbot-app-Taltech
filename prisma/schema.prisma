@@ -41,3 +41,16 @@ model SystemPrompt {
   createdAt DateTime      @default(now())
   sessions  ChatSession[]
 }
+
+model DocumentChunk {
+  id           String                 @id
+  docId        String
+  manufacturer String
+  title        String
+  url          String?
+  page         Int?
+  language     String
+  content      String
+  embedding    Unsupported("vector(1024)")?
+  searchText   Unsupported("tsvector")?
+}

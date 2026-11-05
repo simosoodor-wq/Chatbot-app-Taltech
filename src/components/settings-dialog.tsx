@@ -79,7 +79,7 @@ export function SettingsDialog(props: {
           />
           <Setting
             label="Top-P"
-            hint={`Otsingu laius: ${passageCount(topP)} dokumendilõiku vastuse kohta. Hakkab mõjuma, kui dokumendibaas on ühendatud.`}
+            hint={`Otsingu laius: kuni ${passageCount(topP)} dokumendilõiku vastuse kohta.`}
             value={topP}
             onChange={setTopP}
             onCommit={(value) => props.onSave({ topP: value })}
