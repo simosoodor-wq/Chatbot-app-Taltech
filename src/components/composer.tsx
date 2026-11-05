@@ -22,7 +22,8 @@ export function Composer(props: {
     const element = textarea.current;
     if (!element) return;
     element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, 200)}px`;
+    const borders = element.offsetHeight - element.clientHeight;
+    element.style.height = `${Math.min(element.scrollHeight + borders, 200)}px`;
   }, [text]);
 
   function clearFile() {
