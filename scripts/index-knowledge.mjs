@@ -120,16 +120,19 @@ ${row.content}`));
       await sleep(RATE_LIMIT_WAIT_MS);
       continue;
     }
-    await prisma.$transaction(
-      rows.map(
-        (row, index) => prisma.$executeRaw`
-          INSERT INTO "DocumentChunk"
-            ("id", "docId", "manufacturer", "title", "url", "page", "language", "content", "embedding")
-          VALUES (${row.id}, ${row.docId}, ${row.manufacturer}, ${row.title}, ${row.url},
-            ${row.page}, ${row.language}, ${row.content}, ${JSON.stringify(vectors[index])}::vector)
-          ON CONFLICT ("id") DO UPDATE SET "embedding" = EXCLUDED."embedding"`,
-      ),
-    );
+    const payload = rows.map((row, index) => ({
+      ...row,
+      embedding: JSON.stringify(vectors[index]),
+    }));
+    await prisma.$executeRaw`
+      INSERT INTO "DocumentChunk"
+        ("id", "docId", "manufacturer", "title", "url", "page", "language", "content", "embedding")
+      SELECT x."id", x."docId", x."manufacturer", x."title", x."url", x."page", x."language",
+        x."content", x."embedding"::vector
+      FROM jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) AS x(
+        "id" text, "docId" text, "manufacturer" text, "title" text, "url" text, "page" int,
+        "language" text, "content" text, "embedding" text)
+      ON CONFLICT ("id") DO UPDATE SET "embedding" = EXCLUDED."embedding"`;
     const before = done;
     done += rows.length;
     if (Math.floor(done / LOG_EVERY) > Math.floor(before / LOG_EVERY)) {
