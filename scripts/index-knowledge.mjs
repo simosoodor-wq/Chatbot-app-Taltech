@@ -10,7 +10,11 @@ const VOYAGE_URL = VOYAGE_KEY?.startsWith("al-")
 const VOYAGE_MODEL = "voyage-4-large";
 const INSERT_BATCH = 500;
 const EMBED_BATCH = 64;
+const MIN_EMBED_BATCH = 8;
 const MAX_ATTEMPTS = 8;
+const RATE_LIMIT_WAIT_MS = 65_000;
+const RATE_LIMITED_PACE_MS = 21_000;
+const LOG_EVERY = 500;
 
 const prisma = new PrismaClient();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +46,8 @@ async function syncRows(chunks) {
   console.log(`[index] rows: ${missing.length} added, ${stale.length} removed`);
 }
 
+class RateLimited extends Error {}
+
 async function embed(texts) {
   for (let attempt = 1; ; attempt++) {
     const response = await fetch(VOYAGE_URL, {
@@ -56,8 +62,8 @@ async function embed(texts) {
       const body = await response.json();
       return body.data.map((item) => item.embedding);
     }
-    const retryable = response.status === 429 || response.status >= 500;
-    if (!retryable || attempt >= MAX_ATTEMPTS) {
+    if (response.status === 429) throw new RateLimited();
+    if (response.status < 500 || attempt >= MAX_ATTEMPTS) {
       throw new Error(`Voyage returned ${response.status}: ${await response.text()}`);
     }
     const waitSeconds = Math.min(5 * 2 ** attempt, 120);
@@ -72,13 +78,25 @@ async function embedMissing() {
     return;
   }
   let done = 0;
+  let batchSize = EMBED_BATCH;
+  let paceMs = 0;
   for (;;) {
     const rows = await prisma.$queryRaw`
       SELECT "id", "title", "content" FROM "DocumentChunk"
-      WHERE "embedding" IS NULL ORDER BY "id" LIMIT ${EMBED_BATCH}`;
+      WHERE "embedding" IS NULL ORDER BY "id" LIMIT ${batchSize}`;
     if (rows.length === 0) break;
 
-    const vectors = await embed(rows.map((row) => `${row.title}\n\n${row.content}`));
+    let vectors;
+    try {
+      vectors = await embed(rows.map((row) => `${row.title}\n\n${row.content}`));
+    } catch (error) {
+      if (!(error instanceof RateLimited)) throw error;
+      batchSize = Math.max(MIN_EMBED_BATCH, Math.floor(batchSize / 2));
+      paceMs = RATE_LIMITED_PACE_MS;
+      console.log(`[index] rate limited, waiting a minute; batch is now ${batchSize}`);
+      await sleep(RATE_LIMIT_WAIT_MS);
+      continue;
+    }
     await prisma.$transaction(
       rows.map((row, index) =>
         prisma.$executeRaw`
@@ -86,8 +104,12 @@ async function embedMissing() {
           WHERE "id" = ${row.id}`,
       ),
     );
+    const before = done;
     done += rows.length;
-    if (done % (EMBED_BATCH * 25) === 0) console.log(`[index] embedded ${done} chunks`);
+    if (Math.floor(done / LOG_EVERY) > Math.floor(before / LOG_EVERY)) {
+      console.log(`[index] embedded ${done} chunks`);
+    }
+    await sleep(paceMs);
   }
   console.log(`[index] embedding finished, ${done} chunks this run`);
 }
