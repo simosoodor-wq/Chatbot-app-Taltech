@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Source documents: too large for GitHub (845 MB, one file over 100 MB)
+content/
+
+# Local tooling and logs
+.vercel/
+.claude/
+npm-debug.log*
+.DS_Store
