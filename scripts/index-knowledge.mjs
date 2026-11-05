@@ -26,6 +26,24 @@ function readChunks() {
     .map((line) => JSON.parse(line));
 }
 
+/** The trial volume is small, and Postgres keeps up to 1 GB of write-ahead log by default. */
+async function limitDiskUse() {
+  const statements = [
+    `ALTER SYSTEM SET max_wal_size = '128MB'`,
+    `ALTER SYSTEM SET min_wal_size = '32MB'`,
+    `SELECT pg_reload_conf()`,
+    `CHECKPOINT`,
+    `VACUUM "DocumentChunk"`,
+  ];
+  for (const statement of statements) {
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch (error) {
+      console.error(`[index] "${statement}" failed:`, error.message);
+    }
+  }
+}
+
 async function syncRows(chunks) {
   const wanted = new Set(chunks.map((chunk) => chunk.id));
   const existing = await prisma.documentChunk.findMany({ select: { id: true } });
@@ -115,8 +133,10 @@ async function embedMissing() {
 }
 
 try {
+  await limitDiskUse();
   await syncRows(readChunks());
   await embedMissing();
+  await limitDiskUse();
 } catch (error) {
   console.error("[index] stopped:", error);
   process.exitCode = 1;
