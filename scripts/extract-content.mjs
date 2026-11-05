@@ -40,6 +40,8 @@ function catalog() {
 function cleanPage(text) {
   return text
     .replace(/­\s*/g, "")
+    // PostgreSQL text cannot hold NUL, and other control characters are PDF noise.
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F�]/g, "")
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .join("\n")
