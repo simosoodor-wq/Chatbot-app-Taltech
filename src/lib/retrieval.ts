@@ -13,7 +13,6 @@ export type Passage = {
 
 export type Source = Omit<Passage, "content" | "id" | "docId"> & { number: number };
 
-const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_MODEL = "voyage-4-large";
 const VOYAGE_TIMEOUT_MS = 8_000;
 const CANDIDATES = 40;
@@ -27,10 +26,12 @@ const STOP_WORDS = new Set(
 );
 
 async function embedQuery(query: string): Promise<number[] | null> {
-  const key = process.env.VOYAGE_API_KEY;
+  const key = process.env.VOYAGE_API_KEY?.trim();
   if (!key) return null;
+  // Keys created in MongoDB Atlas only work on its own host.
+  const host = key.startsWith("al-") ? "ai.mongodb.com" : "api.voyageai.com";
   try {
-    const response = await fetch(VOYAGE_URL, {
+    const response = await fetch(`https://${host}/v1/embeddings`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ input: [query], model: VOYAGE_MODEL, input_type: "query" }),

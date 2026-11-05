@@ -2,7 +2,11 @@
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 
-const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
+const VOYAGE_KEY = process.env.VOYAGE_API_KEY?.trim();
+// Keys created in MongoDB Atlas only work on its own host.
+const VOYAGE_URL = VOYAGE_KEY?.startsWith("al-")
+  ? "https://ai.mongodb.com/v1/embeddings"
+  : "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_MODEL = "voyage-4-large";
 const INSERT_BATCH = 500;
 const EMBED_BATCH = 64;
@@ -43,7 +47,7 @@ async function embed(texts) {
     const response = await fetch(VOYAGE_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+        Authorization: `Bearer ${VOYAGE_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ input: texts, model: VOYAGE_MODEL, input_type: "document" }),
@@ -63,7 +67,7 @@ async function embed(texts) {
 }
 
 async function embedMissing() {
-  if (!process.env.VOYAGE_API_KEY) {
+  if (!VOYAGE_KEY) {
     console.log("[index] VOYAGE_API_KEY is not set; only text search is available.");
     return;
   }
